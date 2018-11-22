@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>AD_UNIT_ID_FOR_BANNER_TEST</key>
+	<string>ca-app-pub-3940256099942544/2934735716</string>
+	<key>AD_UNIT_ID_FOR_INTERSTITIAL_TEST</key>
+	<string>ca-app-pub-3940256099942544/4411468910</string>
+	<key>CLIENT_ID</key>
+	<string>902687141483-ed5p0390a0htd07ep7r8vrmssgb9ttpu.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.902687141483-ed5p0390a0htd07ep7r8vrmssgb9ttpu</string>
+	<key>API_KEY</key>
+	<string>AIzaSyBGYZ8x0AtVYZaMHkapGtQ-uWAe7WgVYWE</string>
+	<key>GCM_SENDER_ID</key>
+	<string>902687141483</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>Pelle-Vedin-AB.Golfbros11</string>
+	<key>PROJECT_ID</key>
+	<string>golfbros-96518</string>
+	<key>STORAGE_BUCKET</key>
+	<string>golfbros-96518.appspot.com</string>
+	<key>IS_ADS_ENABLED</key>
+	<true></true>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<false></false>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:902687141483:ios:75c336d8ba994bc3</string>
+	<key>DATABASE_URL</key>
+	<string>https://golfbros-96518.firebaseio.com</string>
+</dict>
+</plist>
