@@ -12,8 +12,9 @@ import Firebase
 class PlayController: UIViewController {
     
     // outlets till alla knappar och fält
+    
+    @IBOutlet weak var courseLabel: UILabel!
     @IBOutlet weak var holeNumberLabel: UILabel!
-    @IBOutlet weak var scoreLabel: UILabel!
     @IBOutlet weak var onParLabel: UILabel!
     @IBOutlet weak var par3Button: UIButton!
     @IBOutlet weak var par4Button: UIButton!
@@ -48,10 +49,18 @@ class PlayController: UIViewController {
     var date: String = "" // kommer från seagen
     var scoreDict = [[String: String]]() // kommer från seguen
     var holeNumber: NSInteger = 1 // håller aktuellt hålnummer, startar alltid på 1
+    let selectedBackGroundColor = UIColor.black
+    let normalBackGroundColor = UIColor.white
+    let selectedTextColor = UIColor.yellow
+    let normalTextColor = UIColor.black
+    let underParTextColor = UIColor.red
+    let holeNrTextColor = UIColor.orange
+    let shadedColor = UIColor.gray
     
     // alla knapphändelser
     @IBAction func parButtonClicked(_ sender: UIButton) {
         let parButton = sender as UIButton
+        // i .tag ligger vilket par det är (3, 4 eller 5)
         let par = String(parButton.tag)
         updateScore(category: "par", value: par)
         if par == "3" {  // Om det är en par 3 så sätts fwhit till "not set"
@@ -61,6 +70,7 @@ class PlayController: UIViewController {
     @IBAction func fwHitClicked(_ sender: UIButton) {
         let fwHitButton = sender as UIButton
         var fwHit: String = ""
+        // i .tag ligger 0 för ingen fairwayhet och 1 för fairwayhit
         switch fwHitButton.tag {
         case 1:
             fwHit = "yes"
@@ -75,6 +85,7 @@ class PlayController: UIViewController {
     @IBAction func girClicked(_ sender: UIButton) {
         let girButton = sender as UIButton
         var gir: String = ""
+        // i .tag ligger 0 för ingen GIR och 1 för GIR
         switch girButton.tag {
         case 1:
             gir = "yes"
@@ -88,6 +99,7 @@ class PlayController: UIViewController {
     }
     @IBAction func puttsClicked(_ sender: UIButton) {
         let puttsButton = sender as UIButton
+        // i .tag ligger antalet puttar som angivits
         let putts = String(puttsButton.tag)
         updateScore(category: "putts", value: putts)
         puttsAction(putts: putts)
@@ -95,6 +107,7 @@ class PlayController: UIViewController {
     }
     @IBAction func strokesClicked(_ sender: UIButton) {
         let strokesButton = sender as UIButton
+        // i .tag ligger antalet slag som angivits
         let strokes = String(strokesButton.tag)
         updateScore(category: "score", value: strokes)
         strokesAction(strokes: strokes)
@@ -103,7 +116,7 @@ class PlayController: UIViewController {
     // Functions for moving one hole back
         if self.holeNumber > 1 {
             self.holeNumber = self.holeNumber - 1
-            holeNumberLabel.text = String(self.holeNumber)
+            holeNumberLabel.text = "#" + String(self.holeNumber)
             configureView()
         }
     }
@@ -111,44 +124,55 @@ class PlayController: UIViewController {
     // Functions for moving to next hole
         if self.holeNumber < 18 {
             self.holeNumber = self.holeNumber + 1
-            holeNumberLabel.text = String(self.holeNumber)
+            holeNumberLabel.text = "#" + String(self.holeNumber)
             configureView()
         }
     }
-    //
     // controllerns programlogik
     override func viewWillAppear(_ animated: Bool){
         super.viewWillAppear(animated)
+        let user = Auth.auth().currentUser
+        self.uid = user!.uid
+        initialLoad() // ladda data från det som sattes i seguen dvs scoreDict
     }
     override func viewDidLoad() {
         super.viewDidLoad()
-        initialLoad() // ladda data från det som sattes i seguen dvs scoreDict
-
+        self.courseLabel.text = self.golfCourse
+        self.navigationItem.title = self.date
+        // möjlighet att cleara hålet och eventuella reggade resultat
+        self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Clear", style: .plain, target: self, action: #selector(resetAction))
     }
     override func didReceiveMemoryWarning() {
         super.didReceiveMemoryWarning()
         // Dispose of any resources that can be recreated.
     }
+    override func viewWillDisappear(_ animated: Bool) {
+        // här
+        self.refRounds.removeAllObservers()
+    }
     // all score-uppdatering i scoreDict sker HÄR!!!!
     func updateScore(category: String, value: String) {
         // räkna om totaler och uppdatera firebase med relevant data
-        self.scoreDict [holeNumber] [category] = value
-        // uppdatera specifik nod med rätt score
-        let myChild = String(holeNumber) + "/" + category
-        self.refRounds.child(self.uid).child(self.timeStamp).child(myChild).setValue(self.scoreDict[holeNumber] [category])
+        // först uppdaterar vi scoreDict med värden vi fick i anropet
+        self.scoreDict [self.holeNumber] [category] = value
+        // uppdatera specifik nod med rätt score i firebase
+        let myChild = String(self.holeNumber) + "/" + category
+        self.refRounds.child(self.uid).child(self.timeStamp).child(myChild).setValue(self.scoreDict[self.holeNumber] [category])
         // Aggregera resultat i scoreDic med node = 0
         let myCategories = ["par", "fwHit", "gir", "putts", "score"]
         // nollställ alla aggregat innan omräkning
         for myCategory in myCategories {
             scoreDict[0] [myCategory] = "0"
         }
-        var myNrOfHoles: NSInteger = 0
-        var myNrOfPar3s: NSInteger = 0
+        var myNrOfHoles: NSInteger = 0 // räknare för antal hål i ronden
+        var myNrOfPar3s: NSInteger = 0 // räknare för antal par3 hål i ronden
         // Aggregera resultat
         for index in 1...18 {
             if scoreDict [index] ["par"]! != "not set" {
                 scoreDict [0] ["par"] = String(Int(scoreDict [0] ["par"]!)! + Int(scoreDict [index] ["par"]!)!)
+                //räkna upp antalet hål
                 myNrOfHoles = myNrOfHoles + 1
+                // håll reda på hur många par3 hål
                 if scoreDict [index] ["par"]! == "3" {
                     myNrOfPar3s = myNrOfPar3s + 1
                 }
@@ -187,20 +211,11 @@ class PlayController: UIViewController {
     func initialLoad() {
         // Data finns redan i scoreDict
         // sätt färg och data i labels
-        holeNumberLabel.backgroundColor = UIColor.lightGray
-        holeNumberLabel.text = String(self.holeNumber)
+        self.holeNumberLabel.backgroundColor = holeNrTextColor
+        self.holeNumberLabel.text = "#" + String(self.holeNumber)
         configureView() // här konfigureras hålet på skärmen
-        self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Clear", style: .done, target: self, action: #selector(resetAction))
-        // sätt rubrik till golfbana och datum
-        self.navigationItem.title = self.golfCourse + ", " + self.date
     }
     func configureView() {
-        // Nollställ buttons
-        resetParButtonColor()
-        resetfwHitColor()
-        resetgirColor()
-        resetPuttsButtonColor()
-        resetStrokesButtonColor()
         // Sätt par buttons
         parButtonAction(par: self.scoreDict [self.holeNumber] ["par"]!)
         // Sätt fw hit buttons
@@ -211,12 +226,6 @@ class PlayController: UIViewController {
         puttsAction(putts: self.scoreDict [self.holeNumber] ["putts"]!)
         // sätt strokes buttons
         strokesAction(strokes: self.scoreDict [self.holeNumber] ["score"]!)
-        // uppdatera med totalt antal slag
-        if scoreDict [0] ["score"] != "not set" {
-            scoreLabel.text = scoreDict [0] ["score"]
-        }
-        // Uppdatera med under / på / över par
-        calculateOnPar()
     }
     // Räkna ut nuvarande resultat mot par
     func calculateOnPar() {
@@ -231,128 +240,154 @@ class PlayController: UIViewController {
             }
         }
         let myScore = myResult - myPar
-        onParLabel.textColor = UIColor.black
-        onParLabel.text = "on par"
-        if myScore > 0 {
-            onParLabel.text = "+" + String(myScore)
-            onParLabel.textColor = UIColor.black
-        }
-        if myScore < 0 {
-            onParLabel.text = String(myScore)
-            onParLabel.textColor = UIColor.red
+        // sätt text och fär beroende på...
+        switch myScore {
+        case 0:
+            self.onParLabel.textColor = normalTextColor
+            self.onParLabel.text = "on par"
+        case Int.min..<0:
+            self.onParLabel.text = String(myScore)
+            self.onParLabel.textColor = underParTextColor
+        default:
+            self.onParLabel.text = "+" + String(myScore)
+            self.onParLabel.textColor = normalTextColor
         }
     }
     // Buttonactions
     func parButtonAction (par: String) {
         resetParButtonColor()
-        if par == "3" {
-            self.par3Button.backgroundColor = UIColor.black
-            self.par3Button.setTitleColor(.yellow, for: .normal)
+        switch par {
+        case "3":
+            self.par3Button.backgroundColor = selectedBackGroundColor
+            self.par3Button.setTitleColor(selectedTextColor, for: .normal)
             // vid par 3 är fwhit inte aktuellt
-            resetfwHitColor()
+            //resetfwHitColor()
             disablefwHit()
-            //updateScore(category: "fwHit", value: "not set")
-        }
-        if par == "4" {
-            self.par4Button.backgroundColor = UIColor.black
-            self.par4Button.setTitleColor(.yellow, for: .normal)
-            enablefwHit()}
-        if par == "5" {
-            resetParButtonColor()
-            self.par5Button.backgroundColor = UIColor.black
-            self.par5Button.setTitleColor(.yellow, for: .normal)
-            enablefwHit()}
-        if par == "not set" {
+            updateScore(category: "fwHit", value: "not set")
+        case "4":
+            self.par4Button.backgroundColor = selectedBackGroundColor
+            self.par4Button.setTitleColor(selectedTextColor, for: .normal)
             enablefwHit()
+        case "5":
+            resetParButtonColor()
+            self.par5Button.backgroundColor = selectedBackGroundColor
+            self.par5Button.setTitleColor(selectedTextColor, for: .normal)
+            enablefwHit()
+        case "not set":
+            enablefwHit()
+        default:
+            print ("Error in parButtonAction")
         }
     }
     func fwHitAction(fwHit: String) {
-        if fwHit == "yes" {
-            self.fwHitNo.backgroundColor = UIColor.white
-            self.fwHitYes.backgroundColor = UIColor.black
-            self.fwHitNo.setTitleColor(.black, for: .normal)
-            self.fwHitYes.setTitleColor(.yellow, for: .normal)}
-        if fwHit == "no" {
-            self.fwHitNo.backgroundColor = UIColor.black
-            self.fwHitYes.backgroundColor = UIColor.white
-            self.fwHitNo.setTitleColor(.yellow, for: .normal)
-            self.fwHitYes.setTitleColor(.black, for: .normal)}
+        resetfwHitColor()
+        switch fwHit {
+        case "yes":
+            self.fwHitNo.backgroundColor = normalBackGroundColor
+            self.fwHitYes.backgroundColor = selectedBackGroundColor
+            self.fwHitNo.setTitleColor(normalTextColor, for: .normal)
+            self.fwHitYes.setTitleColor(selectedTextColor, for: .normal)
+        case "no":
+            self.fwHitNo.backgroundColor = selectedBackGroundColor
+            self.fwHitYes.backgroundColor = normalBackGroundColor
+            self.fwHitNo.setTitleColor(selectedTextColor, for: .normal)
+            self.fwHitYes.setTitleColor(normalTextColor, for: .normal)
+        case "not set":
+            if self.scoreDict [self.holeNumber] ["par"]! == "3" {
+                disablefwHit()
+            } else {
+                resetfwHitColor()
+            }
+        default:
+            print("Error in fwHitAction")
+        }
     }
     func girAction(gir: String) {
-        if gir == "yes" {
-            self.girNo.backgroundColor = UIColor.white
-            self.girYes.backgroundColor = UIColor.black
-            self.girNo.setTitleColor(.black, for: .normal)
-            self.girYes.setTitleColor(.yellow, for: .normal)}
-        if gir == "no" {
-            self.girNo.backgroundColor = UIColor.black
-            self.girYes.backgroundColor = UIColor.white
-            self.girNo.setTitleColor(.yellow, for: .normal)
-            self.girYes.setTitleColor(.black, for: .normal)}
+        resetgirColor()
+        switch gir {
+        case "yes":
+            self.girNo.backgroundColor = normalBackGroundColor
+            self.girYes.backgroundColor = selectedBackGroundColor
+            self.girNo.setTitleColor(normalTextColor, for: .normal)
+            self.girYes.setTitleColor(selectedTextColor, for: .normal)
+        case "no":
+            self.girNo.backgroundColor = selectedBackGroundColor
+            self.girYes.backgroundColor = normalBackGroundColor
+            self.girNo.setTitleColor(selectedTextColor, for: .normal)
+            self.girYes.setTitleColor(normalTextColor, for: .normal)
+        case "not set":
+            resetgirColor()
+        default:
+            print("Error in girAction")
+        }
     }
     func puttsAction(putts: String) {
         resetPuttsButtonColor()
-        if putts == "0" {
-            self.putts0.backgroundColor = UIColor.black
-            self.putts0.setTitleColor(.yellow, for: .normal)}
-        if putts == "1" {
-            self.putts1.backgroundColor = UIColor.black
-            self.putts1.setTitleColor(.yellow, for: .normal)}
-        if putts == "2" {
-            self.putts2.backgroundColor = UIColor.black
-            self.putts2.setTitleColor(.yellow, for: .normal)}
-        if putts == "3" {
-            self.putts3.backgroundColor = UIColor.black
-            self.putts3.setTitleColor(.yellow, for: .normal)}
-        if putts == "4" {
-            self.putts4.backgroundColor = UIColor.black
-            self.putts4.setTitleColor(.yellow, for: .normal)}
-        if putts == "5" {
-            self.putts5.backgroundColor = UIColor.black
-            self.putts5.setTitleColor(.yellow, for: .normal)}
+        switch putts {
+        case "0":
+            self.putts0.backgroundColor = selectedBackGroundColor
+            self.putts0.setTitleColor(selectedTextColor, for: .normal)
+        case "1":
+            self.putts1.backgroundColor = selectedBackGroundColor
+            self.putts1.setTitleColor(selectedTextColor, for: .normal)
+        case "2":
+            self.putts2.backgroundColor = selectedBackGroundColor
+            self.putts2.setTitleColor(selectedTextColor, for: .normal)
+        case "3":
+            self.putts3.backgroundColor = selectedBackGroundColor
+            self.putts3.setTitleColor(selectedTextColor, for: .normal)
+        case "4":
+            self.putts4.backgroundColor = selectedBackGroundColor
+            self.putts4.setTitleColor(selectedTextColor, for: .normal)
+        case "5":
+            self.putts5.backgroundColor = selectedBackGroundColor
+            self.putts5.setTitleColor(selectedTextColor, for: .normal)
+        case "not set":
+            resetPuttsButtonColor()
+        default:
+            print ("Error in putts action")
+        }
     }
     func strokesAction(strokes: String) {
+        resetStrokesButtonColor()
         switch strokes {
         case "1":
-            resetStrokesButtonColor()
-            self.strokes1.backgroundColor = UIColor.black
-            self.strokes1.setTitleColor(.yellow, for: .normal)
+            self.strokes1.backgroundColor = selectedBackGroundColor
+            self.strokes1.setTitleColor(selectedTextColor, for: .normal)
         case "2":
-            resetStrokesButtonColor()
-            self.strokes2.backgroundColor = UIColor.black
-            self.strokes2.setTitleColor(.yellow, for: .normal)
+            self.strokes2.backgroundColor = selectedBackGroundColor
+            self.strokes2.setTitleColor(selectedTextColor, for: .normal)
         case "3":
-            resetStrokesButtonColor()
-            self.strokes3.backgroundColor = UIColor.black
-            self.strokes3.setTitleColor(.yellow, for: .normal)
+            self.strokes3.backgroundColor = selectedBackGroundColor
+            self.strokes3.setTitleColor(selectedTextColor, for: .normal)
         case "4":
-            resetStrokesButtonColor()
-            self.strokes4.backgroundColor = UIColor.black
-            self.strokes4.setTitleColor(.yellow, for: .normal)
+            self.strokes4.backgroundColor = selectedBackGroundColor
+            self.strokes4.setTitleColor(selectedTextColor, for: .normal)
         case "5":
-            resetStrokesButtonColor()
-            self.strokes5.backgroundColor = UIColor.black
-            self.strokes5.setTitleColor(.yellow, for: .normal)
+            self.strokes5.backgroundColor = selectedBackGroundColor
+            self.strokes5.setTitleColor(selectedTextColor, for: .normal)
         case "6":
-            resetStrokesButtonColor()
-            self.strokes6.backgroundColor = UIColor.black
-            self.strokes6.setTitleColor(.yellow, for: .normal)
+            self.strokes6.backgroundColor = selectedBackGroundColor
+            self.strokes6.setTitleColor(selectedTextColor, for: .normal)
         case "7":
-            resetStrokesButtonColor()
-            self.strokes7.backgroundColor = UIColor.black
-            self.strokes7.setTitleColor(.yellow, for: .normal)
+            self.strokes7.backgroundColor = selectedBackGroundColor
+            self.strokes7.setTitleColor(selectedTextColor, for: .normal)
         case "8":
-            resetStrokesButtonColor()
-            self.strokes8.backgroundColor = UIColor.black
-            self.strokes8.setTitleColor(.yellow, for: .normal)
+            self.strokes8.backgroundColor = selectedBackGroundColor
+            self.strokes8.setTitleColor(selectedTextColor, for: .normal)
         case "9":
+            self.strokesMore.backgroundColor = selectedBackGroundColor
+            self.strokesMore.setTitleColor(selectedTextColor, for: .normal)
+        case "not set":
             resetStrokesButtonColor()
-            self.strokesMore.backgroundColor = UIColor.black
-            self.strokesMore.setTitleColor(.yellow, for: .normal)
         default:
-            print("something went wrong")
+            print("Error in strokes action")
         }
         calculateOnPar()
+        // uppdatera med totalt antal slag
+        //if scoreDict [0] ["score"] != "not set" {
+        //    self.scoreLabel.text = scoreDict [0] ["score"]
+        //}
     }
     @objc func resetAction() {
         // rensa aktuellt hål, dvs self.holeNumber
@@ -365,73 +400,75 @@ class PlayController: UIViewController {
     }
     // funktioner för att nollställa knappar
     func resetParButtonColor() {
-        self.par3Button.backgroundColor = UIColor.white
-        self.par4Button.backgroundColor = UIColor.white
-        self.par5Button.backgroundColor = UIColor.white
-        self.par3Button.setTitleColor(.black, for: .normal)
-        self.par4Button.setTitleColor(.black, for: .normal)
-        self.par5Button.setTitleColor(.black, for: .normal)
+        self.par3Button.backgroundColor = normalBackGroundColor
+        self.par4Button.backgroundColor = normalBackGroundColor
+        self.par5Button.backgroundColor = normalBackGroundColor
+        self.par3Button.setTitleColor(normalTextColor, for: .normal)
+        self.par4Button.setTitleColor(normalTextColor, for: .normal)
+        self.par5Button.setTitleColor(normalTextColor, for: .normal)
     }
     func resetfwHitColor() {
-        self.fwHitLabel.textColor = UIColor.black
-        self.fwHitNo.backgroundColor = UIColor.white
-        self.fwHitYes.backgroundColor = UIColor.white
-        self.fwHitNo.setTitleColor(.black, for: .normal)
-        self.fwHitYes.setTitleColor(.black, for: .normal)
+        self.fwHitLabel.textColor = normalTextColor
+        self.fwHitNo.backgroundColor = normalBackGroundColor
+        self.fwHitYes.backgroundColor = normalBackGroundColor
+        self.fwHitNo.setTitleColor(normalTextColor, for: .normal)
+        self.fwHitYes.setTitleColor(normalTextColor, for: .normal)
     }
     func disablefwHit() {
-        self.fwHitLabel.textColor = UIColor.gray
-        self.fwHitYes.setTitleColor(.gray, for: .normal)
+        self.fwHitLabel.textColor = shadedColor
+        self.fwHitYes.backgroundColor = normalBackGroundColor
+        self.fwHitYes.setTitleColor(shadedColor, for: .normal)
         self.fwHitYes.isEnabled = false
-        self.fwHitNo.setTitleColor(.gray, for: .normal)
+        self.fwHitNo.backgroundColor = normalBackGroundColor
+        self.fwHitNo.setTitleColor(shadedColor, for: .normal)
         self.fwHitNo.isEnabled = false
     }
     func enablefwHit() {
-        self.fwHitLabel.textColor = UIColor.black
-        self.fwHitYes.setTitleColor(.black, for: .normal)
+        self.fwHitLabel.textColor = normalTextColor
+        self.fwHitYes.setTitleColor(normalTextColor, for: .normal)
         self.fwHitYes.isEnabled = true
-        self.fwHitNo.setTitleColor(.black, for: .normal)
+        self.fwHitNo.setTitleColor(normalTextColor, for: .normal)
         self.fwHitNo.isEnabled = true
     }
     func resetgirColor() {
-        self.girNo.backgroundColor = UIColor.white
-        self.girYes.backgroundColor = UIColor.white
-        self.girNo.setTitleColor(.black, for: .normal)
-        self.girYes.setTitleColor(.black, for: .normal)
+        self.girNo.backgroundColor = normalBackGroundColor
+        self.girYes.backgroundColor = normalBackGroundColor
+        self.girNo.setTitleColor(normalTextColor, for: .normal)
+        self.girYes.setTitleColor(normalTextColor, for: .normal)
     }
     func resetPuttsButtonColor() {
-        self.putts0.backgroundColor = UIColor.white
-        self.putts1.backgroundColor = UIColor.white
-        self.putts2.backgroundColor = UIColor.white
-        self.putts3.backgroundColor = UIColor.white
-        self.putts4.backgroundColor = UIColor.white
-        self.putts5.backgroundColor = UIColor.white
-        self.putts0.setTitleColor(.black, for: .normal)
-        self.putts1.setTitleColor(.black, for: .normal)
-        self.putts2.setTitleColor(.black, for: .normal)
-        self.putts3.setTitleColor(.black, for: .normal)
-        self.putts4.setTitleColor(.black, for: .normal)
-        self.putts5.setTitleColor(.black, for: .normal)
+        self.putts0.backgroundColor = normalBackGroundColor
+        self.putts1.backgroundColor = normalBackGroundColor
+        self.putts2.backgroundColor = normalBackGroundColor
+        self.putts3.backgroundColor = normalBackGroundColor
+        self.putts4.backgroundColor = normalBackGroundColor
+        self.putts5.backgroundColor = normalBackGroundColor
+        self.putts0.setTitleColor(normalTextColor, for: .normal)
+        self.putts1.setTitleColor(normalTextColor, for: .normal)
+        self.putts2.setTitleColor(normalTextColor, for: .normal)
+        self.putts3.setTitleColor(normalTextColor, for: .normal)
+        self.putts4.setTitleColor(normalTextColor, for: .normal)
+        self.putts5.setTitleColor(normalTextColor, for: .normal)
     }
     func resetStrokesButtonColor() {
-        self.strokes1.backgroundColor = UIColor.white
-        self.strokes2.backgroundColor = UIColor.white
-        self.strokes3.backgroundColor = UIColor.white
-        self.strokes4.backgroundColor = UIColor.white
-        self.strokes5.backgroundColor = UIColor.white
-        self.strokes6.backgroundColor = UIColor.white
-        self.strokes7.backgroundColor = UIColor.white
-        self.strokes8.backgroundColor = UIColor.white
-        self.strokesMore.backgroundColor = UIColor.white
-        self.strokes1.setTitleColor(.black, for: .normal)
-        self.strokes2.setTitleColor(.black, for: .normal)
-        self.strokes3.setTitleColor(.black, for: .normal)
-        self.strokes4.setTitleColor(.black, for: .normal)
-        self.strokes5.setTitleColor(.black, for: .normal)
-        self.strokes6.setTitleColor(.black, for: .normal)
-        self.strokes7.setTitleColor(.black, for: .normal)
-        self.strokes8.setTitleColor(.black, for: .normal)
-        self.strokesMore.setTitleColor(.black, for: .normal)
+        self.strokes1.backgroundColor = normalBackGroundColor
+        self.strokes2.backgroundColor = normalBackGroundColor
+        self.strokes3.backgroundColor = normalBackGroundColor
+        self.strokes4.backgroundColor = normalBackGroundColor
+        self.strokes5.backgroundColor = normalBackGroundColor
+        self.strokes6.backgroundColor = normalBackGroundColor
+        self.strokes7.backgroundColor = normalBackGroundColor
+        self.strokes8.backgroundColor = normalBackGroundColor
+        self.strokesMore.backgroundColor = normalBackGroundColor
+        self.strokes1.setTitleColor(normalTextColor, for: .normal)
+        self.strokes2.setTitleColor(normalTextColor, for: .normal)
+        self.strokes3.setTitleColor(normalTextColor, for: .normal)
+        self.strokes4.setTitleColor(normalTextColor, for: .normal)
+        self.strokes5.setTitleColor(normalTextColor, for: .normal)
+        self.strokes6.setTitleColor(normalTextColor, for: .normal)
+        self.strokes7.setTitleColor(normalTextColor, for: .normal)
+        self.strokes8.setTitleColor(normalTextColor, for: .normal)
+        self.strokesMore.setTitleColor(normalTextColor, for: .normal)
     }
 }
 

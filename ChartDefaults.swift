@@ -46,7 +46,7 @@ struct GBChartsDefaults {
     fileprivate static var iPhoneChartSettings: ChartSettings {
         var chartSettings = ChartSettings()
         chartSettings.leading = 1
-        chartSettings.top = 5
+        chartSettings.top = 10
         chartSettings.trailing = 1
         chartSettings.bottom = 5
         chartSettings.labelsToAxisSpacingX = 5
@@ -82,7 +82,7 @@ struct GBChartsDefaults {
     }
     
     static var labelFont: UIFont {
-        return GBChartsDefaults.fontWithSize(Env.iPad ? 14 : 11)
+        return GBChartsDefaults.fontWithSize(Env.iPad ? 14 : 17)
     }
     
     static var labelFontSmall: UIFont {

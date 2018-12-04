@@ -20,40 +20,38 @@ class RoundsController: UIViewController, UITableViewDelegate, UITableViewDataSo
     var timeStamp: String = "" // nyckel
     var newRound: Bool = false
     var roundsIndex: NSInteger = 0
+    var roundsIndex2: IndexPath? = nil
     var snapStore = DataSnapshot() // håller läsresultatet från FireBase
-    let activityindicator = UIActivityIndicatorView()
 
     @IBOutlet weak var golfCourse: UITextField!
     @IBOutlet weak var strokesGained: UITextField!
     @IBOutlet weak var date: UITextField!
     @IBOutlet weak var tableView: UITableView!
     
-    @IBAction func newRoundButton(_ sender: UIButton) {
-        self.newRound = true
-        createNewRound()
-    }
+    
     // Här startar vi
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        // kolla vilken användare som är påloggad
-        let user = Auth.auth().currentUser
-        self.uid = user!.uid
-        date.text = todaysDate() // anropa funktion för att hämta dagens datum
-        activityindicator.startAnimating()
-        downloadRounds() { (status: Bool) in
-            if !status {
-                self.alert(title: "Error", message: "Something went wrong")
-            }
-            self.activityindicator.stopAnimating()
-        }
     }
     override func viewDidLoad() {
         super.viewDidLoad()
-        //self.tableView.reloadData()
-        //print(scoreDict)
+        self.navigationItem.title = "Rounds"
+        //kolla vilken användare som är påloggad
+        let user = Auth.auth().currentUser
+        self.uid = user!.uid
+        date.text = todaysDate() // anropa funktion för att hämta dagens datum
+        downloadRounds() { (status: Bool) in
+            if !status {
+                self.alert(title: "Error", message: "Something went wrong")
+                return
+            }
+        }
+        //self.navigationItem.rightBarButtonItem = UIBarButtonItem(
+        
+        self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: "New round", style: .plain, target: self, action: #selector(createNewRound))
     }
     override func viewWillDisappear(_ animated: Bool) {
-        // här ska vi ha kod för att stoppa listner men hur?
+        // här
         self.refRounds.removeAllObservers()
     }
     override func didReceiveMemoryWarning() {
@@ -89,6 +87,7 @@ class RoundsController: UIViewController, UITableViewDelegate, UITableViewDataSo
         self.timeStamp = roundsDict [indexPath.row] ["timeStamp"]! // kom ihåg vilken timestamp/nyckel som valts
         self.newRound = false // Denna rond finns sedan tidigare
         self.roundsIndex = indexPath.row // håll reda på vilken rad som selekterats
+        self.roundsIndex2 = indexPath
         self.performSegue(withIdentifier: "showRound", sender: self)
     }
     // hantera förberedelse inför segues
@@ -102,13 +101,15 @@ class RoundsController: UIViewController, UITableViewDelegate, UITableViewDataSo
                 // sätt data i targetVC
                 targetVC.scoreDict = self.scoreDict
                 targetVC.golfCourse = self.golfCourse.text!
+                self.golfCourse.text = "" // rensa inmatningsfält
                 targetVC.date = self.date.text!
                 targetVC.strokesGained = self.strokesGained.text!
+                self.strokesGained.text = "" // rensa inmatningsfält
                 targetVC.timeStamp = self.timeStamp
             }
             else {
                 // sätt data i targetVC, hämta från snapStore med alla ronder
-                getScoreDict() // här hämtas rätt rond från snapStore
+                populateScoreDict() // här hämtas rätt rond från snapStore
                 targetVC.scoreDict = self.scoreDict
                 targetVC.golfCourse = self.roundsDict[self.roundsIndex] ["golfCourse"]!
                 targetVC.date = self.roundsDict[self.roundsIndex] ["date"]!
@@ -122,48 +123,55 @@ class RoundsController: UIViewController, UITableViewDelegate, UITableViewDataSo
             targetVC.uid = self.uid
             targetVC.golfCourse = self.roundsDict[self.roundsIndex] ["golfCourse"]!
             targetVC.date = self.roundsDict[self.roundsIndex] ["date"]!
-            getScoreDict()
+            populateScoreDict()
             targetVC.scoreDict = self.scoreDict
         }
     }
     // här skapas ny rond, lagras i FireBase
-    func createNewRound() {
-        // Skapa nyckel för ny rond dvs timestamp
-        self.timeStamp = generateTimestamp()
-        // sätt  ett blankt resultatset med myScore
-        self.scoreDict.removeAll()
-        let myTemp = ["par": "not set", "fwHit": "not set", "gir": "not set", "putts": "not set", "score": "not set"]
-        // uppdatera db för timestamp med blankt resultat
-        var myHolenr: String = ""
-        var myNode: String = ""
-        for index in 0...18 {
-            // bygg upp scoreDict
-            self.scoreDict.append(myTemp)
-            // skapa data dill db
-            myHolenr = String(index)
-            // bygg sträng timestamp / hålnr
-            myNode = self.timeStamp + "/" + myHolenr
-            // uppdatera db för timestamp och hålnr med blankt resultat
-            self.refRounds.child(self.uid).child(myNode).setValue(myTemp)
-        }
-        // skapa roundinformation
-        let myRound = ["golfCourse": self.golfCourse.text!,
-                       "strokesGained": self.strokesGained.text!,
-                       "date": self.date.text!,
-                       "totHoles": "0",
-                       "totPar3s": "0"
-                       ] as [String : Any]
-        // Uppdatera db för timestamp med rondinformation
-        self.refRounds.child(self.uid).child(self.timeStamp).child("roundsDict").setValue(myRound)
-        // anropa den nya viewcontroller
-        self.performSegue(withIdentifier: "showRound", sender: self)
+    @objc func createNewRound() {
+        if self.golfCourse.text == "" {
+            alert(title: "Error", message: "Please provide a name for the golfcourse you are playing")
+            return
+        } else
+        {
+            self.timeStamp = generateTimestamp() // Skapa nyckel för ny rond dvs timestamp
+            self.scoreDict.removeAll()  // sätt  ett blankt resultatset med myScore
+            self.newRound = true  // sätt flagga till newRound
+            let myTemp1 = ["par": "0", "fwHit": "0", "gir": "0", "putts": "0", "score": "0"]
+            let myTemp2 = ["par": "not set", "fwHit": "not set", "gir": "not set", "putts": "not set", "score": "not set"]
+            // uppdatera db för timestamp med blankt resultat
+            var myHolenr: String = ""
+            var myNode: String = ""
+            self.scoreDict.append(myTemp1) // Skapa scoredict för index 0
+            myHolenr = String(0)
+            myNode = self.timeStamp + "/" + myHolenr  // bygg sträng för uppdatering av index 0
+            self.refRounds.child(self.uid).child(myNode).setValue(myTemp1) // uppdatera db för index 0
+            // Sätt index 1-18 i db
+            for index in 1...18 {
+                self.scoreDict.append(myTemp2) // skapa scoredict för index 1-18
+                myHolenr = String(index)
+                myNode = self.timeStamp + "/" + myHolenr // bygg sträng för uppdatering av index 1-18
+                self.refRounds.child(self.uid).child(myNode).setValue(myTemp2) // uppdatera db för index 1-18
+            }
+            // skapa roundinformation
+            let myRound = ["golfCourse": self.golfCourse.text!,
+                           "strokesGained": self.strokesGained.text!,
+                           "date": self.date.text!,
+                           "totHoles": "0",
+                           "totPar3s": "0"
+                           ] as [String : Any]
+            // Uppdatera db för timestamp med rondinformation
+            self.refRounds.child(self.uid).child(self.timeStamp).child("roundsDict").setValue(myRound)
+            // anropa den nya viewcontroller
+            self.performSegue(withIdentifier: "showRound", sender: self)
+            }
     }
     // här hämtas data från FireBase, lagras i roundsDict och snapStore
     func downloadRounds(completion: @escaping (Bool) -> Void) {
         // I roundsDict ligger användarens övergripande rond data, nyckel är timestamp
         // I scoreDict ligger användares  resultat med timestamp som "nyckel", nyckel är timestamp
         roundsDict.removeAll() // radera roundsDict innan vi fyller på igen
-        // inläsning med sortering i datumordning och endast de 100 sista dvs de 100 senaste ronderna
+        // inläsning med sortering i datumordning och endast de lastRonds sista dvs de lastRounds senaste ronderna
         self.refRounds.child(self.uid).queryOrdered(byChild: "date").queryLimited(toLast: UInt(lastRounds)).observeSingleEvent(of: .value, with: {snapshot in
             self.snapStore = snapshot // spara undan alla ronder och rondresultat
             for child in snapshot.children {
@@ -178,10 +186,11 @@ class RoundsController: UIViewController, UITableViewDelegate, UITableViewDataSo
                 myDict["date"] = mySnap?["roundsDict"]! ["date"] as? String
                 // addera till dictionary av ronder
                 self.roundsDict.insert(myDict, at: 0)
-            }
+                }
             self.tableView.reloadData()
             completion(true)
-        })
+            }
+        )
     }
     // Diverse supportfunktioner
     func alert(title: String, message: String) {
@@ -203,15 +212,15 @@ class RoundsController: UIViewController, UITableViewDelegate, UITableViewDataSo
         formatter.dateFormat = "yyyy-MM-dd"
         return (formatter.string(from: today)) as String
     }
-    func getScoreDict() {
+    func populateScoreDict() {
         self.scoreDict.removeAll()
         for child in self.snapStore.children {
             let snap = child as! DataSnapshot
             let mySnap = snap.value as? [String: AnyObject]
             let myTimeStamp = snap.key
-            var myDict: [String: String] = [:] // temporär dictionary
             // kolla om det är den child vi vill ha
             if myTimeStamp == self.timeStamp {
+                var myDict: [String: String] = [:] // temporär dictionary
                 for index in 0...18 {
                     let stringIndex = String(index)
                     myDict["par"] = mySnap?[stringIndex]! ["par"] as? String
@@ -221,6 +230,7 @@ class RoundsController: UIViewController, UITableViewDelegate, UITableViewDataSo
                     myDict["score"] = mySnap?[stringIndex]! ["score"] as? String
                     self.scoreDict.append(myDict)
                 }
+                return
             }
         }
     }

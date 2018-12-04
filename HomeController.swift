@@ -11,12 +11,10 @@ import Firebase
 import SwiftCharts
 
 class HomeController: UIViewController {
-
+    
     let refRounds = Database.database().reference(withPath: "users")
     var roundsDict = [[String: String]]() // övegripande rond-information
     var aggregateArray: [Double] = []
-    //var scoreDict = [[String: String]]() // score-info, alltid 1+18 hål, summor i första posten
-    //var allScores = [[String: String]]()
     var uid: String = "" // aktuell användar-nyckel
     var timeStamp: String = "" // nyckel
     var newRound: Bool = false
@@ -24,9 +22,9 @@ class HomeController: UIViewController {
     var roundsIndex: NSInteger = 0
     var snapStore = DataSnapshot() // håller läsresultatet från FireBase
     let activityindicator = UIActivityIndicatorView()
-    var fwHitVar: Double = 0
-    var girVar: Double = 0
-    var puttsVar: Double = 0
+    var fwHitVar: Double = 0  // räknare
+    var girVar: Double = 0  // räknare
+    var puttsVar: Double = 0  // räknare
     
     @IBOutlet weak var loggedInUserLabel: UILabel!
     
@@ -34,36 +32,36 @@ class HomeController: UIViewController {
     @IBOutlet weak var myChart: UIView!
     //Deklarationer för diagrammet
     fileprivate var chart: Chart?
+    @IBOutlet weak var graphLabelLeft: UILabel!
+    @IBOutlet weak var grapgLabelRight: UILabel!
     
     @IBOutlet weak var avgLabel: UILabel!
     @IBOutlet weak var fwHitLabel: UILabel!
     @IBOutlet weak var girLabel: UILabel!
     @IBOutlet weak var puttsLabel: UILabel!
     
+    
+    
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated) // vad gör denna?
+       
+        
+    }
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        self.navigationItem.title = "GolfBros"
         // kolla vilken användare som är påloggad
-        navigationController?.navigationBar.topItem?.hidesBackButton = true
-        navigationController?.navigationBar.topItem?.title = "GolfBros"
         let user = Auth.auth().currentUser
         self.uid = user!.uid
-        activityindicator.startAnimating()
+        if let user = user {
+            loggedInUserLabel.text = user.email
+        }
         downloadRounds() { (status: Bool) in
             if !status {
                 self.alert(title: "Error", message: "Something went wrong")
                 return
             }
-            self.activityindicator.stopAnimating()
         }
-    }
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        // Do any additional setup after loading the view, typically from a nib.
-        let user = Auth.auth().currentUser
-        if let user = user {
-            loggedInUserLabel.text = user.email
-        }
-        
     }
     override func viewWillDisappear(_ animated: Bool) {
         // här ska vi ha kod för att stoppa listner men hur?
@@ -79,7 +77,7 @@ class HomeController: UIViewController {
         roundsDict.removeAll() // radera roundsDict innan vi fyller på igen
         // inläsning med sortering i datumordning
         self.refRounds.child(self.uid).queryOrdered(byChild: "date").queryLimited(toLast: UInt(lastRounds)).observeSingleEvent(of: .value, with: {snapshot in
-            //self.snapStore = snapshot // spara undan alla ronder och rondresultat
+            self.snapStore = snapshot // spara undan alla ronder och rondresultat
             for child in snapshot.children {
                 let snap = child as! DataSnapshot
                 let mySnap = snap.value as? [String: AnyObject]
@@ -101,13 +99,18 @@ class HomeController: UIViewController {
         })
     }
     func aggregateResults () {
-        // här gör vi nåt
-        //print("nåt")
+        // skapa 3 nyckeltal för home
         let maxRounds = self.roundsDict.count
+        if maxRounds == 0 {
+            return
+        }
         var my1: Double = 0
         var avg: Double = 0
         for index in 0...(maxRounds - 1) {
+            //Räkna ut det procentuella värdet av fairway hits
             let my2 = Double(self.roundsDict [index] ["fwHit"]!)! / (Double(self.roundsDict [index] ["totHoles"]!)! - Double(self.roundsDict[index] ["totPar3s"]!)!) * 100
+            // återlagra det procentuella värdet istället för antalsvärdet
+            self.roundsDict [index] ["fwHit"] = String(my2)
             my1 = my1 + my2
         }
         avg = my1 / Double(maxRounds)
@@ -115,7 +118,10 @@ class HomeController: UIViewController {
         my1 = 0
         avg = 0
         for index in 0...(maxRounds - 1) {
+            //Räkna ut det procentuella värdet av GIR
             let my2 = Double(self.roundsDict [index] ["gir"]!)! / Double(self.roundsDict[index] ["totHoles"]!)! * 100
+            // återlagra det procentuella värdet istället för antalsvärdet
+            self.roundsDict [index] ["gir"] = String(my2)
             my1 = my1 + my2
         }
         avg = my1 / Double(maxRounds)
@@ -128,6 +134,11 @@ class HomeController: UIViewController {
         avg = my1 / Double(maxRounds)
         self.puttsLabel.text = String(Int(avg))
         self.avgLabel.text = "Averages last " + String(maxRounds) + " rounds"
+        self.graphLabelLeft.text = "Fairway Hits"
+        self.graphLabelLeft.textColor = UIColor.red
+        self.grapgLabelRight.text = "Greens in regulation"
+        self.grapgLabelRight.textColor = UIColor.blue
+        //self.trendLabel.text = "Trends last " + String(maxRounds) + " rounds"
     }
     // Generell alertfunktion
     func alert(title: String, message: String) {
@@ -139,71 +150,57 @@ class HomeController: UIViewController {
     
     func createChart () {
         let labelSettings = ChartLabelSettings(font: GBChartsDefaults.labelFont)
-        
         let bgColors = [UIColor.red, UIColor.blue, UIColor(red: 0, green: 0.7, blue: 0, alpha: 1), UIColor(red: 1, green: 0.5, blue: 0, alpha: 1), UIColor.black]
-        
         // fwHits
-        func createChartPoints0(_ color: UIColor) -> [ChartPoint] {
+        func createChartPointsFwHit(_ color: UIColor) -> [ChartPoint] {
             return [
-                createChartPoint(1, 65, color),
-                createChartPoint(2, 75, color),
-                createChartPoint(3, 70, color),
-                createChartPoint(4, 60, color),
-                createChartPoint(5, 50, color),
-                createChartPoint(6, 55, color),
-                createChartPoint(7, 60, color)
+                createChartPoint(1, Double(roundsDict [0] ["fwHit"]!)!, color),
+                createChartPoint(2, Double(roundsDict [1] ["fwHit"]!)!, color),
+                createChartPoint(3, Double(roundsDict [2] ["fwHit"]!)!, color),
+                createChartPoint(4, Double(roundsDict [3] ["fwHit"]!)!, color),
+                createChartPoint(5, Double(roundsDict [4] ["fwHit"]!)!, color),
+                createChartPoint(6, Double(roundsDict [5] ["fwHit"]!)!, color),
+                createChartPoint(7, Double(roundsDict [6] ["fwHit"]!)!, color)
             ]
         }
         // gir
-        func createChartPoints1(_ color: UIColor) -> [ChartPoint] {
+        func createChartPointsGIR(_ color: UIColor) -> [ChartPoint] {
             return [
-                createChartPoint(1, 55, color),
-                createChartPoint(2, 50, color),
-                createChartPoint(3, 55, color),
-                createChartPoint(4, 60, color),
-                createChartPoint(5, 65, color),
-                createChartPoint(6, 60, color),
-                createChartPoint(7, 45, color)
-            ]
-        }
-        // putts
-        func createChartPoints2(_ color: UIColor) -> [ChartPoint] {
-            return [
-                createChartPoint(1, 32, color),
-                createChartPoint(2, 34, color),
-                createChartPoint(3, 36, color),
-                createChartPoint(4, 32, color),
-                createChartPoint(5, 30, color),
-                createChartPoint(6, 39, color),
-                createChartPoint(7, 43, color)
+                createChartPoint(1, Double(roundsDict [0] ["gir"]!)!, color),
+                createChartPoint(2, Double(roundsDict [1] ["gir"]!)!, color),
+                createChartPoint(3, Double(roundsDict [2] ["gir"]!)!, color),
+                createChartPoint(4, Double(roundsDict [3] ["gir"]!)!, color),
+                createChartPoint(5, Double(roundsDict [4] ["gir"]!)!, color),
+                createChartPoint(6, Double(roundsDict [5] ["gir"]!)!, color),
+                createChartPoint(7, Double(roundsDict [6] ["gir"]!)!, color)
             ]
         }
         
-        let chartPoints0 = createChartPoints0(bgColors[4])
-        let chartPoints1 = createChartPoints1(bgColors[4])
-        let chartPoints2 = createChartPoints2(bgColors[4])
         
-        let xValues0 = chartPoints0.map{$0.x}
+        let chartPointsFwHit = createChartPointsFwHit(bgColors[4])
+        let chartPointsGIR = createChartPointsGIR(bgColors[4])
+        
+        let xValues0 = chartPointsFwHit.map{$0.x}
         
         let chartSettings = GBChartsDefaults.chartSettingsWithPanZoom
         
         let top: CGFloat = 0
         let viewFrame = CGRect(x: 0, y: top, width: myChart.frame.size.width, height: myChart.frame.size.height - top - 10)
         
-        let yValuesLeft = ChartAxisValuesStaticGenerator.generateYAxisValuesWithChartPoints(chartPoints0, minSegmentCount: 8, maxSegmentCount: 20, multiple: 5, axisValueGenerator: {ChartAxisValueDouble($0, labelSettings: ChartLabelSettings(font: GBChartsDefaults.labelFontSmall, fontColor: bgColors[4]))}, addPaddingSegmentIfEdge: false)
+        let yValuesLeft = ChartAxisValuesStaticGenerator.generateYAxisValuesWithChartPoints(chartPointsFwHit, minSegmentCount: 5, maxSegmentCount: 10, multiple: 20, axisValueGenerator: {ChartAxisValueDouble($0, labelSettings: ChartLabelSettings(font: GBChartsDefaults.labelFont, fontColor: bgColors[4]))}, addPaddingSegmentIfEdge: false)
         
-        let yValuesRight = ChartAxisValuesStaticGenerator.generateYAxisValuesWithChartPoints(chartPoints2, minSegmentCount: 6, maxSegmentCount: 20, multiple: 5, axisValueGenerator: {ChartAxisValueDouble($0, labelSettings: ChartLabelSettings(font: GBChartsDefaults.labelFontSmall, fontColor: bgColors[4]))}, addPaddingSegmentIfEdge: false)
+        let yValuesRight = ChartAxisValuesStaticGenerator.generateYAxisValuesWithChartPoints(chartPointsFwHit, minSegmentCount: 5, maxSegmentCount: 10, multiple: 20, axisValueGenerator: {ChartAxisValueDouble($0, labelSettings: ChartLabelSettings(font: GBChartsDefaults.labelFont, fontColor: bgColors[4]))}, addPaddingSegmentIfEdge: false)
         
         let axisTitleFont = GBChartsDefaults.labelFont
         
         let yModelsLeft: [ChartAxisModel] = [
-            ChartAxisModel(axisValues: yValuesLeft, lineColor: bgColors[4], axisTitleLabels: [ChartAxisLabel(text: "Fairway Hits & GIR", settings: ChartLabelSettings(font: axisTitleFont, fontColor: bgColors[0]).defaultVertical())])
+            ChartAxisModel(axisValues: yValuesLeft, lineColor: bgColors[4], axisTitleLabels: [])
         ]
         let yModelsRight: [ChartAxisModel] = [
-            ChartAxisModel(axisValues: yValuesRight, lineColor: bgColors[4], axisTitleLabels: [ChartAxisLabel(text: "Putts", settings: ChartLabelSettings(font: axisTitleFont, fontColor: bgColors[2]).defaultVertical())])
+            ChartAxisModel(axisValues: yValuesRight, lineColor: bgColors[4], axisTitleLabels: [])
         ]
         let xModelsBottom: [ChartAxisModel] = [
-            ChartAxisModel(axisValues: xValues0, lineColor: bgColors[4], axisTitleLabels: [ChartAxisLabel(text: "Rounds", settings: ChartLabelSettings(font: axisTitleFont, fontColor: bgColors[4]))])
+            ChartAxisModel(axisValues: xValues0, lineColor: bgColors[4], axisTitleLabels: [ChartAxisLabel(text: "Last rounds", settings: ChartLabelSettings(font: axisTitleFont, fontColor: bgColors[4]))])
         ]
         
         // calculate coords space in the background to keep UI smooth
@@ -221,19 +218,18 @@ class HomeController: UIViewController {
                 let xAxesBottom = coordsSpace.xLowAxesLayers
                 
                 // create layers with references to axes and with colors
-                let lineModel0 = ChartLineModel(chartPoints: chartPoints0, lineColor: bgColors[0], animDuration: 1, animDelay: 0)
-                let lineModel1 = ChartLineModel(chartPoints: chartPoints1, lineColor: bgColors[1], animDuration: 1, animDelay: 0)
-                let lineModel2 = ChartLineModel(chartPoints: chartPoints2, lineColor: bgColors[2], animDuration: 1, animDelay: 0)
+                let lineModelFwHit = ChartLineModel(chartPoints: chartPointsFwHit, lineColor: bgColors[0], animDuration: 1, animDelay: 0)
+                let lineModelGIR = ChartLineModel(chartPoints: chartPointsGIR, lineColor: bgColors[1], animDuration: 1, animDelay: 0)
                 
-                let chartPointsLineLayer0 = ChartPointsLineLayer<ChartPoint>(xAxis: xAxesBottom[0].axis, yAxis: yAxesLeft[0].axis, lineModels: [lineModel0])
-                let chartPointsLineLayer1 = ChartPointsLineLayer<ChartPoint>(xAxis: xAxesBottom[0].axis, yAxis: yAxesLeft[0].axis, lineModels: [lineModel1])
-                let chartPointsLineLayer3 = ChartPointsLineLayer<ChartPoint>(xAxis: xAxesBottom[0].axis, yAxis: yAxesRight[0].axis, lineModels: [lineModel2])
+                let chartPointsLineLayerFwHit = ChartPointsLineLayer<ChartPoint>(xAxis: xAxesBottom[0].axis, yAxis: yAxesLeft[0].axis, lineModels: [lineModelFwHit])
+                let chartPointsLineLayerGIR = ChartPointsLineLayer<ChartPoint>(xAxis: xAxesBottom[0].axis, yAxis: yAxesLeft[0].axis, lineModels: [lineModelGIR])
                 
-                let lineLayers = [chartPointsLineLayer0, chartPointsLineLayer1, chartPointsLineLayer3]
+                let lineLayers = [chartPointsLineLayerFwHit, chartPointsLineLayerGIR]
+
                 
                 let layers: [ChartLayer] = [
                     yAxesLeft[0], xAxesBottom[0], yAxesRight[0],
-                    lineLayers[0], lineLayers[1], lineLayers[2]
+                    lineLayers[0], lineLayers[1]
                     ]
                 
                 let chart = Chart(

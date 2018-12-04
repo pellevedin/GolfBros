@@ -17,6 +17,8 @@ class SetupController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         // Do any additional setup after loading the view, typically from a nib.
+        self.navigationItem.title = "Setup"
+
     }
 
     override func didReceiveMemoryWarning() {
@@ -41,7 +43,15 @@ class SetupController: UIViewController {
         let email: String = "blabla"
         self.resetPasswordAction(email)
     }
-    
+    func resetPassword (email: String) {
+        Auth.auth().sendPasswordReset(withEmail: email) { (error) in
+            // ...
+        }
+        let alertController = UIAlertController(title: "Confirmation", message: "See your email-inbox for more information", preferredStyle: .alert)
+        let defaultAction = UIAlertAction(title: "OK", style: .cancel, handler: nil)
+        alertController.addAction(defaultAction)
+        self.present(alertController, animated: false, completion: nil)
+    }
     
 }
 
